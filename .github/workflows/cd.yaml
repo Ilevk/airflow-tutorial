@@ -19,4 +19,4 @@ jobs:
           username: ${{ secrets.USER }}
           script: |
             cd ${{ vars.project_path }}/${{ github.event.repository.name }}
-            git pull
+            git pull origin main
