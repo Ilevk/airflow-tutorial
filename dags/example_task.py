@@ -3,8 +3,10 @@ from airflow.operators.python import PythonOperator
 from pendulum import datetime
 
 
+@task
 def example_task(name: str):
-    print('Hello , World!', name)
+    print("Hello , World!", name)
+
 
 @dag(
     start_date=datetime(2024, 1, 1),
@@ -14,15 +16,9 @@ def example_task(name: str):
     default_args={"owner": "Astro", "retries": 3},
     tags=["example"],
 )
-def example_dag():
-    logan_hi_task = PythonOperator(example_task
-                                   ,op_kwargs={
-                                       "name":"Logan"
-                                   })
-    david_hi_task = PythonOperator(example_task
-                                   ,op_kwargs={
-                                       "name":"Logan"
-                                   })
-    example_task()
+def example_task_dag():
+    example_task("Logan")
+    example_task("David")
 
-example_dag()
+
+example_task_dag()
