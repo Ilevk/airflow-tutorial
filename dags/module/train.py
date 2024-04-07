@@ -1,7 +1,4 @@
 from airflow.providers.postgres.hooks.postgres import PostgresHook
-
-from pickle import dumps
-
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.experimental import enable_iterative_imputer
@@ -13,6 +10,11 @@ from sklearn.metrics import f1_score
 from sklearn.pipeline import Pipeline
 import optuna
 from optuna.storages import RDBStorage
+import mlflow
+from mlflow.tracking import MlflowClient
+from mlflow.store.artifact.runs_artifact_repo import RunsArtifactRepository
+
+mlflow.set_experiment("hospital_model")
 
 
 def train_fn(**context):
@@ -60,7 +62,6 @@ def train_fn(**context):
     x_valid = preprocessor.transform(x_valid)
 
     # Model Tunes
-
     def objective(trial):
         n_estimators = trial.suggest_int("n_estimators", 2, 100)
         max_depth = int(trial.suggest_int("max_depth", 1, 32))
@@ -91,4 +92,87 @@ def train_fn(**context):
 
     print("Validation Score: ", f1_score(y_valid, model.predict(x_valid)))
 
+    # Model Log
     pipeline = Pipeline([("preprocessor", preprocessor), ("model", model)])
+
+    metrics = {
+        "f1_score": f1_score(y_valid, model.predict(x_valid)),
+    }
+
+    with mlflow.start_run():
+        mlflow.log_params(best_params)
+        mlflow.log_metrics(metrics)
+        model_info = mlflow.sklearn.log_model(pipeline, "model")
+
+    context["ti"].xcom_push(key="run_id", value=model_info.run_id)
+    context["ti"].xcom_push(key="model_uri", value=model_info.model_uri)
+    context["ti"].xcom_push(key="eval_metric", value="f1_score")
+    print(
+        f"Done Train model, run_id: {model_info.run_id}, model_uri: {model_info.model_uri}"
+    )
+
+
+def create_model_version(model_name: str, **context):
+    run_id = context["ti"].xcom_pull(key="run_id")
+    model_uri = context["ti"].xcom_pull(key="model_uri")
+    eval_metric = context["ti"].xcom_pull(key="eval_metric")
+
+    # Create Model Version
+
+    client = MlflowClient()
+    try:
+        client.create_registered_model(model_name)
+    except Exception as e:
+        print("Model already exists")
+
+    current_metric = client.get_run(run_id).data.metrics[eval_metric]
+    model_source = RunsArtifactRepository.get_underlying_uri(model_uri)
+    model_version = client.create_model_version(
+        model_name, model_source, run_id, description=f"{eval_metric}: {current_metric}"
+    )
+
+    context["ti"].xcom_push(key="model_version", value=model_version.version)
+    print(f"Done Create model version, model_version: {model_version}")
+
+
+def transition_model_stage(model_name: str, **context):
+    version = context["ti"].xcom_pull(key="model_version")
+    eval_metric = context["ti"].xcom_pull(key="eval_metric")
+
+    client = MlflowClient()
+    production_model = None
+    current_model = client.get_model_version(model_name, version)
+
+    filter_string = f"name='{current_model.name}'"
+    results = client.search_model_versions(filter_string)
+
+    for mv in results:
+        if mv.current_stage == "Production":
+            production_model = mv
+
+    if production_model is None:
+        client.transition_model_version_stage(
+            current_model.name, current_model.version, "Production"
+        )
+        production_model = current_model
+    else:
+        current_metric = client.get_run(current_model.run_id).data.metrics[eval_metric]
+        production_metric = client.get_run(production_model.run_id).data.metrics[
+            eval_metric
+        ]
+
+        if current_metric < production_metric:
+            client.transition_model_version_stage(
+                current_model.name,
+                current_model.version,
+                "Production",
+                archive_existing_versions=True,
+            )
+            production_model = current_model
+
+    context["ti"].xcom_push(key="production_version", value=production_model.version)
+    print(
+        f"Done Deploy Production_Model, production_version: {production_model.version}"
+    )
+
+    # Create Model Version

@@ -20,9 +20,19 @@ def example_ml_pipeline():
         task_id="train_task",
         python_callable=train.train_fn,
     )
+    model_create_task = PythonOperator(
+        task_id="model_create_task",
+        python_callable=train.create_model_version,
+        op_kwargs={"model_name": "hospital_model"},
+    )
+    model_transition_task = PythonOperator(
+        task_id="model_transition_task",
+        python_callable=train.transition_model_stage,
+        op_kwargs={"model_name": "hospital_model"},
+    )
     end_task = EmptyOperator(task_id="end_task")
 
-    start_task >> train_task >> end_task
+    start_task >> [train_task >> model_create_task >> model_transition_task] >> end_task
 
 
 example_ml_pipeline()
