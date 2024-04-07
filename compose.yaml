@@ -9,8 +9,8 @@ x-common-env-vars: &common-env-vars
   AIRFLOW__WEBSERVER__SECRET_KEY: "ml-pipeline_9d9827"
   AIRFLOW__WEBSERVER__RBAC: "True"
   AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
-  AWS_ACCESS_KEY_ID: minio
-  AWS_SECRET_ACCESS_KEY: miniostorage
+  AWS_ACCESS_KEY_ID: minioadmin
+  AWS_SECRET_ACCESS_KEY: minioadmin
   MLFLOW_S3_ENDPOINT_URL: http://host.docker.internal:9000
   ASTRONOMER_ENVIRONMENT: local
 
