@@ -174,5 +174,3 @@ def transition_model_stage(model_name: str, **context):
     print(
         f"Done Deploy Production_Model, production_version: {production_model.version}"
     )
-
-    # Create Model Version
