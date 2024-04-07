@@ -90,6 +90,7 @@ mdit-py-plugins==0.4.0
 mdurl==0.1.2
 more-itertools==10.2.0
 multidict==6.0.5
+mlflow==1.27.0
 nodeenv==1.8.0
 numpy==1.26.4
 opentelemetry-api==1.24.0

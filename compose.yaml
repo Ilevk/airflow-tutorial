@@ -11,6 +11,7 @@ x-common-env-vars: &common-env-vars
   AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "True"
   AWS_ACCESS_KEY_ID: minioadmin
   AWS_SECRET_ACCESS_KEY: minioadmin
+  MLFLOW_TRACKING_URI: http://host.docker.internal:5000
   MLFLOW_S3_ENDPOINT_URL: http://host.docker.internal:9000
   ASTRONOMER_ENVIRONMENT: local
 
@@ -36,9 +37,9 @@ services:
     ports:
       - 127.0.0.1:5432:5432
     volumes:
-      
+
       - postgres_data:/var/lib/postgresql/data
-      
+
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -67,9 +68,9 @@ services:
       - /home/ubuntu/airflow-tutorial/include:/usr/local/airflow/include:z
       - /home/ubuntu/airflow-tutorial/tests:/usr/local/airflow/tests:z
 
-      
+
       - airflow_logs:/usr/local/airflow/logs
-      
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -101,9 +102,9 @@ services:
       - /home/ubuntu/airflow-tutorial/plugins:/usr/local/airflow/plugins:z
       - /home/ubuntu/airflow-tutorial/include:/usr/local/airflow/include:z
       - /home/ubuntu/airflow-tutorial/tests:/usr/local/airflow/tests:z
-      
+
       - airflow_logs:/usr/local/airflow/logs
-      
+
     healthcheck:
       test: curl --fail http://webserver:8080/health || exit 1
       interval: 2s
@@ -132,9 +133,8 @@ services:
       - /home/ubuntu/airflow-tutorial/dags:/usr/local/airflow/dags:z
       - /home/ubuntu/airflow-tutorial/plugins:/usr/local/airflow/plugins:z
       - /home/ubuntu/airflow-tutorial/include:/usr/local/airflow/include:z
-      
+
       - airflow_logs:/usr/local/airflow/logs
-      
+
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
