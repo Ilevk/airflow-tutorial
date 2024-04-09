@@ -37,6 +37,8 @@ services:
     command: server /data/minio --console-address :9001
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - /home/ubuntu/model_registry:/data/minio
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
