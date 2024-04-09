@@ -8,16 +8,17 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.compose import ColumnTransformer
 from sklearn.metrics import f1_score
 from sklearn.pipeline import Pipeline
+from sklearn.datasets import load_iris
 import optuna
 from optuna.storages import RDBStorage
 import mlflow
 from mlflow.tracking import MlflowClient
 from mlflow.store.artifact.runs_artifact_repo import RunsArtifactRepository
 
-mlflow.set_experiment("hospital_model")
-
 
 def train_fn(**context):
+    mlflow.set_experiment("hospital_model")
+
     hook = PostgresHook(postgres_conn_id="postgres_default")
     conn = hook.get_conn()
     stmt = """
@@ -103,6 +104,67 @@ def train_fn(**context):
         mlflow.log_params(best_params)
         mlflow.log_metrics(metrics)
         model_info = mlflow.sklearn.log_model(pipeline, "model")
+
+    context["ti"].xcom_push(key="run_id", value=model_info.run_id)
+    context["ti"].xcom_push(key="model_uri", value=model_info.model_uri)
+    context["ti"].xcom_push(key="eval_metric", value="f1_score")
+    print(
+        f"Done Train model, run_id: {model_info.run_id}, model_uri: {model_info.model_uri}"
+    )
+
+
+def train_fn_iris(hook=PostgresHook(postgres_conn_id="postgres_default"), **context):
+    mlflow.set_experiment("iris_model")
+    iris = load_iris()
+    data = iris.data
+    label = iris.target
+
+    x_train, x_valid, y_train, y_valid = train_test_split(
+        data, label, test_size=0.3, shuffle=True, stratify=label
+    )
+
+    # Model Tunes
+    def objective(trial):
+        n_estimators = trial.suggest_int("n_estimators", 2, 100)
+        max_depth = int(trial.suggest_int("max_depth", 1, 32))
+        model = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth)
+        model.fit(x_train, y_train)
+        return f1_score(y_valid, model.predict(x_valid), average="micro")
+
+    storage = RDBStorage(url=hook.get_uri().replace("/postgres", "/optuna"))
+
+    study = optuna.create_study(
+        study_name="iris_model",
+        direction="maximize",
+        storage=storage,
+        load_if_exists=True,
+    )
+
+    study.optimize(objective, n_trials=10)
+
+    best_params = study.best_params
+    best_metric = study.best_value
+
+    print("Best params: ", best_params)
+    print("Best metric: ", best_metric)
+
+    # Model Train
+    model = RandomForestClassifier(**best_params)
+    model.fit(x_train, y_train)
+
+    print(
+        "Validation Score: ", f1_score(y_valid, model.predict(x_valid), average="micro")
+    )
+
+    # Model Log
+    metrics = {
+        "f1_score": f1_score(y_valid, model.predict(x_valid), average="micro"),
+    }
+
+    with mlflow.start_run():
+        mlflow.log_params(best_params)
+        mlflow.log_metrics(metrics)
+        model_info = mlflow.sklearn.log_model(model, "model")
 
     context["ti"].xcom_push(key="run_id", value=model_info.run_id)
     context["ti"].xcom_push(key="model_uri", value=model_info.model_uri)
